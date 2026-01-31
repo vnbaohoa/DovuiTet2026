@@ -2,6 +2,8 @@
 // Google Sheets = source of truth for Teams + Questions, and logs (QuestionLog/AnswerLog)
 
 const { google } = require("googleapis");
+const fs = require("fs");
+const path = require("path");
 
 function mustEnv(name) {
   const v = process.env[name];
@@ -9,8 +11,8 @@ function mustEnv(name) {
   return v;
 }
 
-function getAuthFromEnv() {
-  // Preferred for Render:
+function getAuth() {
+  // ✅ Render recommended: provide base64 JSON in env var
   const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64;
   if (b64) {
     const jsonStr = Buffer.from(b64, "base64").toString("utf8");
@@ -21,16 +23,21 @@ function getAuthFromEnv() {
     });
   }
 
-// Optional fallback for local dev (if you still use a file locally):
+  // ✅ Local fallback: read from service-account.json file path
   const keyPath = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (keyPath) {
+    const abs = path.isAbsolute(keyPath) ? keyPath : path.join(process.cwd(), keyPath);
+    if (!fs.existsSync(abs)) throw new Error(`Service account JSON not found at: ${abs}`);
+
     return new google.auth.GoogleAuth({
-      keyFile: keyPath,
+      keyFile: abs,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
   }
 
-  throw new Error("Set GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 (recommended) or GOOGLE_SERVICE_ACCOUNT_JSON (local file).");
+  throw new Error(
+    "Missing credentials. Set GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 (Render) or GOOGLE_SERVICE_ACCOUNT_JSON (local)."
+  );
 }
 
 async function getSheetsClient() {
@@ -60,8 +67,6 @@ async function loadTeamsFromSheet() {
   const sheets = await getSheetsClient();
   const spreadsheetId = mustEnv("SHEET_ID");
   const sheetName = process.env.TEAMS_SHEET_NAME || "Teams";
-  // Expected columns (headers in row 1):
-  // pin | name | avatarUrl | members | score
   const range = `${sheetName}!A1:Z`;
 
   const res = await sheets.spreadsheets.values.get({ spreadsheetId, range });
@@ -69,22 +74,21 @@ async function loadTeamsFromSheet() {
   if (rows.length < 2) return [];
 
   const headers = rows[0].map(h => String(h || "").trim().toLowerCase());
-  const idxPin = headers.indexOf("Pin");
-  const idxName = headers.indexOf("Name");
-  const idxAvatar = headers.indexOf("avatarUrl");
-  // Allow either "members" or "member" as the header name (your sheet uses "member")
-  const idxMembers = headers.indexOf("Members") !== -1 ? headers.indexOf("members") : headers.indexOf("member");
+
+  const idxPin = headers.indexOf("pin");
+  const idxName = headers.indexOf("name");
+  const idxAvatar = headers.indexOf("avatarurl");
   const idxScore = headers.indexOf("score");
+  const idxMembers = headers.indexOf("members") !== -1 ? headers.indexOf("members") : headers.indexOf("member");
 
   if (idxPin === -1 || idxName === -1) {
-    throw new Error(
-      `Teams sheet must have headers: pin, name (optional: avatarUrl, members, score). Found: ${rows[0].join(", ")}`
-    );
+    throw new Error(`Teams sheet must have headers: pin, name (optional: avatarUrl, members, score)`);
   }
 
   const teams = [];
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
+
     const pin = String(r[idxPin] || "").trim();
     const name = String(r[idxName] || "").trim();
     if (!pin || !name) continue;
@@ -97,8 +101,9 @@ async function loadTeamsFromSheet() {
       ? membersRaw.split(",").map(s => s.trim()).filter(Boolean)
       : [];
 
-    teams.push({ pin, name, avatarUrl, members, score });
+    teams.push({ pin, name, avatarUrl, score, members }); // ✅ include members
   }
+
   return teams;
 }
 
