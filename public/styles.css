@@ -176,3 +176,27 @@ button.danger{ background: rgba(255, 70, 70, 0.20); border-color: rgba(255, 70, 
 }
 .lobbyTeam .avatar{ margin: 0 auto 8px; width: 72px; height: 72px; border-radius: 22px; }
 .lobbyTeam .nameLine{ font-size: 16px; }
+
+/* ===== PROJECTOR QUESTION IMAGE SIZE ===== */
+
+.projectorWrap .media {
+  width: 100%;
+  height: 600px;          /* ✅ fixed height */
+  max-height: 600px;      /* safety */
+  margin-top: 16px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.projectorWrap .media img,
+.projectorWrap .media video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;    /* no cropping */
+}
+
