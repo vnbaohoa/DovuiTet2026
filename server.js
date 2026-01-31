@@ -28,7 +28,7 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, "public")));
 
-const GAME_TITLE = "Quiz Game Night";
+const GAME_TITLE = "Đố vui Tết 2026";
 
 function makeGameId() {
   return `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
