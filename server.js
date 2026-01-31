@@ -437,7 +437,7 @@ function doJoinTeam(socket, enteredPin, teamInfo) {
 
     // NEW: Members list from Teams sheet. Leader is the first name.
     members: Array.isArray(teamInfo.members) ? teamInfo.members : [],
-    leaderName: (Array.isArray(teamInfo.members) && teamInfo.members.length) ? teamInfo.members[0] : \"\",
+    leaderName: (Array.isArray(teamInfo.members) && teamInfo.members.length) ? teamInfo.members[0] : "",
 
     score: 0,
     lockedChoice: null,
