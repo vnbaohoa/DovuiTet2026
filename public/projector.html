@@ -86,27 +86,38 @@ function startCountdown(endAtMs) {
     }
 
     function renderMedia(q) {
-      const box = $("qMedia");
-      box.innerHTML = "";
-      if (!q || !q.mediaType || !q.mediaUrl) {
-        box.style.display = "none";
-        return;
-      }
-      box.style.display = "";
+  const box = $("qMedia");
+  box.innerHTML = "";
 
-      if (q.mediaType === "image") {
-        const img = document.createElement("img");
-        img.src = q.mediaUrl;
-        box.appendChild(img);
-      } else if (q.mediaType === "video") {
-        const vid = document.createElement("video");
-        vid.src = q.mediaUrl;
-        vid.autoplay = true;
-        vid.muted = true;
-        vid.loop = true;
-        box.appendChild(vid);
-      }
-    }
+  // No media → hide
+  if (!q || !q.mediaType || !q.mediaUrl) {
+    box.style.display = "none";
+    box.style.height = "";
+    box.style.maxHeight = "";
+    return;
+  }
+
+  // ✅ APPLY PER-QUESTION HEIGHT (default 600)
+  const h = q.mediaHeight || 600;
+  box.style.display = "";
+  box.style.height = h + "px";
+  box.style.maxHeight = h + "px";
+
+  if (q.mediaType === "image") {
+    const img = document.createElement("img");
+    img.src = q.mediaUrl;
+    box.appendChild(img);
+  } 
+  else if (q.mediaType === "video") {
+    const vid = document.createElement("video");
+    vid.src = q.mediaUrl;
+    vid.autoplay = true;
+    vid.muted = true;
+    vid.loop = true;
+    vid.playsInline = true;
+    box.appendChild(vid);
+  }
+}
 
     
 function membersHtml(t) {
