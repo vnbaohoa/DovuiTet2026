@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Host</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">Host Panel</div>
+      <div class="badges">
+        <div class="badge">Phase: <span id="phase">—</span></div>
+        <div class="badge">Timer: <span id="timer">—</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div style="font-weight:900;font-size:18px;">Game:</div>
+        <div id="title" style="font-weight:900;font-size:18px;">—</div>
+        <div class="spacer"></div>
+
+        <label class="toggle"><input id="manual" type="checkbox" /> Manual scoring</label>
+        <label class="toggle"><input id="shuffleQs" type="checkbox" checked /> Shuffle questions</label>
+        <label class="toggle"><input id="shuffleChoices" type="checkbox" checked /> Shuffle choices</label>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="row">
+        <button id="start" class="primary">Start Game</button>
+        <button id="pause" class="primary">Resume</button>
+        <button id="reveal" class="secondary">Reveal</button>
+        <button id="next" class="secondary">Next</button>
+        <button id="reset" class="danger">Reset</button>
+        <span id="hostErr" class="small"></span>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:14px;">
+      <div class="card">
+        <h3>Logged-in Teams (device monitoring)</h3>
+        <div id="teams" class="teamList"></div>
+      </div>
+
+      <div class="card">
+        <h3>Takeover Requests</h3>
+        <div id="takeovers" class="teamList"></div>
+        <div class="small" style="margin-top:10px;">
+          Approve takeover to switch devices for a team PIN.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/client.js"></script>
+  <script>
+    socket.emit("registerHost");
+
+    const titleEl = $("title");
+    const phaseEl = $("phase");
+    const timerEl = $("timer");
+    const teamsBox = $("teams");
+    const takeoversBox = $("takeovers");
+    const hostErr = $("hostErr");
+
+    function render(state) {
+      titleEl.textContent = state.title || "—";
+      phaseEl.textContent = state.phase + (state.paused ? " (paused)" : "");
+      timerEl.textContent = state.timer == null ? "--" : String(state.timer);
+
+      $("start").disabled = !(state.phase === "lobby");
+      $("pause").disabled = !(state.phase === "question");
+      $("pause").textContent = state.paused ? "Resume" : "Pause";
+      $("reveal").disabled = !(state.phase === "question");
+      $("next").disabled = !(state.phase === "revealed");
+
+      $("manual").checked = !!state.manualScoring;
+      $("shuffleQs").checked = !!state.shuffleQuestions;
+      $("shuffleChoices").checked = !!state.shuffleChoices;
+    }
+
+    function renderHostState(hs) {
+      teamsBox.innerHTML = (hs.teams || []).map(t => `
+        <div class="teamItem">
+          <div class="teamLeft">
+            <div class="avatar">${t.avatarUrl ? `<img src="${esc(t.avatarUrl)}" />` : "👤"}</div>
+            <div style="min-width:0;">
+              <div class="nameLine">${esc(t.name)} <span class="small">(${esc(t.pin)})</span></div>
+              <div class="small">
+                Leader: <b>${esc(t.leaderName || (t.members && t.members[0]) || "-")}</b><br/>
+                Members: ${esc((t.members || []).join(", ") || "-")}<br/>
+                IP: ${esc(t.ip || "-")}<br/>
+                Device: ${esc(shortUA(t.userAgent || ""))}<br/>
+                Joined: ${esc(fmtTime(t.joinedAt))}
+              </div>
+            </div>
+          </div>
+          <div>
+            <button class="danger" onclick="kickTeam('${esc(t.id)}')">Kick</button>
+          </div>
+        </div>
+      `).join("");
+
+      const reqs = hs.takeovers || [];
+      if (!reqs.length) {
+        takeoversBox.innerHTML = `<div class="small">No takeover requests</div>`;
+      } else {
+        takeoversBox.innerHTML = reqs.map(r => `
+          <div class="teamItem">
+            <div style="min-width:0;">
+              <div class="nameLine">PIN <b>${esc(r.pin)}</b></div>
+              <div class="small">
+                IP: ${esc(r.ip || "-")}<br/>
+                Device: ${esc(shortUA(r.userAgent || ""))}<br/>
+                Requested: ${esc(fmtTime(r.requestedAt))}
+              </div>
+            </div>
+            <div class="row" style="justify-content:flex-end;">
+              <button class="primary" onclick="approveTakeover('${esc(r.pin)}')">Approve</button>
+              <button class="secondary" onclick="denyTakeover('${esc(r.pin)}')">Deny</button>
+            </div>
+          </div>
+        `).join("");
+      }
+    }
+
+    window.kickTeam = (teamId) => socket.emit("hostKickTeam", { teamId });
+    window.approveTakeover = (pin) => socket.emit("hostApproveTakeover", { pin });
+    window.denyTakeover = (pin) => socket.emit("hostDenyTakeover", { pin });
+
+    socket.on("state", (s) => render(s));
+    socket.on("hostState", (hs) => renderHostState(hs));
+    socket.on("hostError", (msg) => {
+      hostErr.textContent = msg || "";
+      setTimeout(()=>hostErr.textContent="", 6000);
+    });
+
+    $("start").onclick = () => socket.emit("hostStart");
+    $("pause").onclick = () => socket.emit("hostPauseToggle");
+    $("reveal").onclick = () => socket.emit("hostReveal");
+    $("next").onclick = () => socket.emit("hostNext");
+    $("reset").onclick = () => socket.emit("hostReset");
+
+    $("manual").onchange = (e) => socket.emit("hostSetManualScoring", e.target.checked);
+    $("shuffleQs").onchange = () => socket.emit("hostSetShuffle", { shuffleQuestions: $("shuffleQs").checked });
+    $("shuffleChoices").onchange = () => socket.emit("hostSetShuffle", { shuffleChoices: $("shuffleChoices").checked });
+  </script>
+</body>
+</html>

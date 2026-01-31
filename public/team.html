@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Team</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title" id="teamLabel">Not joined</div>
+      <div class="badges">
+        <div class="badge">Phase: <span id="phase">—</span></div>
+        <div class="badge">Timer: <span id="timer">—</span></div>
+      </div>
+    </div>
+
+    <div id="joinCard" class="card">
+      <h2>Enter Team Code</h2>
+      <div class="row">
+        <input id="pin" type="text" placeholder="Team code (PIN)" />
+        <button id="joinBtn" class="primary">Join</button>
+      </div>
+      <div id="joinErr" class="notice small"></div>
+      <div class="small" style="margin-top:10px;">
+        Only one device can join per team code. If it says already logged in, request takeover and wait for host approval.
+      </div>
+    </div>
+
+    <div id="playCard" class="card" style="display:none;">
+      <div class="row">
+        <div style="font-size:18px;font-weight:900;">Team: <span id="teamName">—</span></div>
+        <div class="spacer"></div>
+        <div class="small">Status: <span id="status">—</span></div>
+      </div>
+
+      <div id="teamMediaSlot"></div>
+
+      <div class="hr"></div>
+
+      <div class="answerBtns" id="answerBtns"></div>
+
+      <div id="lockInfo" class="notice small">Locked: —</div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/client.js"></script>
+  <script>
+    let joined = false;
+    let myTeamId = null;
+
+    const answerBtns = $("answerBtns");
+    const lockInfo = $("lockInfo");
+    const mediaSlot = $("teamMediaSlot");
+    const joinErr = $("joinErr");
+
+    function showMessage(msg) { joinErr.textContent = msg || ""; }
+
+    function resetToLogin() {
+      joined = false;
+      myTeamId = null;
+      $("teamLabel").textContent = "Not joined";
+      $("teamName").textContent = "—";
+      $("status").textContent = "Enter code";
+      $("joinCard").style.display = "";
+      $("playCard").style.display = "none";
+    }
+
+    function renderTeamMedia(q) {
+      mediaSlot.innerHTML = "";
+      if (!q || !q.mediaType || !q.mediaUrl) return;
+
+      const box = document.createElement("div");
+      box.className = "media";
+
+      if (q.mediaType === "image") {
+        const img = document.createElement("img");
+        img.src = q.mediaUrl;
+        box.appendChild(img);
+      } else if (q.mediaType === "video") {
+        const vid = document.createElement("video");
+        vid.src = q.mediaUrl;
+        vid.controls = true;
+        vid.muted = true;
+        box.appendChild(vid);
+      }
+      mediaSlot.appendChild(box);
+    }
+
+    function renderAnswers(state) {
+      answerBtns.innerHTML = "";
+      renderTeamMedia(state.question);
+
+      const canAnswer = joined && state.phase === "question" && !state.paused;
+      const q = state.question;
+
+      for (let i = 0; i < 4; i++) {
+        const b = document.createElement("button");
+        const txt = q ? q.choices[i] : "";
+        b.textContent = `${letter(i)}${txt ? ": " + txt : ""}`;
+        b.disabled = !canAnswer;
+        b.onclick = () => socket.emit("lockAnswer", i);
+        answerBtns.appendChild(b);
+      }
+    }
+
+    socket.on("state", (s) => {
+      $("timer").textContent = s.timer == null ? "--" : String(s.timer);
+      $("phase").textContent = `${s.phase}${s.paused ? " (paused)" : ""}`;
+
+      const me = s.teams.find(t => t.id === myTeamId);
+      if (me) {
+        const locked = me.lockedChoice == null ? "—" : letter(me.lockedChoice);
+        const res = me.lastResult ? ` • ${String(me.lastResult).toUpperCase()}` : "";
+        lockInfo.textContent = `Locked: ${locked}${res}`;
+      }
+      renderAnswers(s);
+    });
+
+    socket.on("joinError", (msg) => showMessage(msg));
+    socket.on("takeoverRequested", ({ message }) => showMessage(message));
+    socket.on("takeoverApproved", ({ message }) => showMessage(message));
+    socket.on("takeoverDenied", ({ message }) => showMessage(message));
+
+    socket.on("kicked", (msg) => {
+      alert(msg || "You were disconnected by the host.");
+      resetToLogin();
+    });
+
+    $("joinBtn").onclick = () => {
+      showMessage("");
+      socket.emit("joinTeam", { pin: $("pin").value.trim() });
+    };
+
+    socket.on("joined", ({ teamId, name }) => {
+      joined = true;
+      myTeamId = teamId;
+
+      $("teamLabel").textContent = name;
+      $("teamName").textContent = name;
+      $("status").textContent = "Joined";
+
+      $("joinCard").style.display = "none";
+      $("playCard").style.display = "";
+      showMessage("");
+    });
+  </script>
+</body>
+</html>

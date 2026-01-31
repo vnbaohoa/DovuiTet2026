@@ -1,0 +1,172 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Projector</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="projectorWrap">
+    <div class="header">
+      <div class="title" id="pTitle">—</div>
+      <div class="badges">
+        <div class="badge">Phase: <span id="pPhase">—</span></div>
+        <div class="badge">Timer: <span id="pTimer">—</span></div>
+      </div>
+    </div>
+
+    <div id="lobbyView" class="card">
+      <div class="row">
+        <div style="font-size:22px;font-weight:900;">Waiting for teams to log in…</div>
+        <div class="spacer"></div>
+        <div class="small">Teams joined: <span id="joinedCount">0</span></div>
+      </div>
+      <div class="hr"></div>
+      <div id="lobbyTeams" class="lobbyGrid"></div>
+    </div>
+
+    <div id="questionView" class="card" style="display:none;">
+      <div class="row" style="align-items:flex-end;">
+        <div class="questionText" id="qText">—</div>
+        <div class="spacer"></div>
+        <div class="bigTimer" id="bigTimer">--</div>
+      </div>
+
+      <div id="qMedia" class="media" style="display:none;"></div>
+      <div class="choiceGrid" id="choices"></div>
+
+      <div class="hr"></div>
+      <div class="row">
+        <div style="font-weight:900;">Leaderboard</div>
+      </div>
+      <div id="board" class="teamList" style="margin-top:10px;"></div>
+    </div>
+
+    <div id="finishedView" class="card" style="display:none;">
+      <h2>Game Finished</h2>
+      <div id="finalBoard" class="teamList"></div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/client.js"></script>
+  <script>
+    socket.emit("registerProjector");
+
+    function show(viewId) {
+      $("lobbyView").style.display = (viewId === "lobby") ? "" : "none";
+      $("questionView").style.display = (viewId === "question") ? "" : "none";
+      $("finishedView").style.display = (viewId === "finished") ? "" : "none";
+    }
+
+    function renderMedia(q) {
+      const box = $("qMedia");
+      box.innerHTML = "";
+      if (!q || !q.mediaType || !q.mediaUrl) {
+        box.style.display = "none";
+        return;
+      }
+      box.style.display = "";
+
+      if (q.mediaType === "image") {
+        const img = document.createElement("img");
+        img.src = q.mediaUrl;
+        box.appendChild(img);
+      } else if (q.mediaType === "video") {
+        const vid = document.createElement("video");
+        vid.src = q.mediaUrl;
+        vid.autoplay = true;
+        vid.muted = true;
+        vid.loop = true;
+        box.appendChild(vid);
+      }
+    }
+
+    
+function membersHtml(t) {
+  const arr = Array.isArray(t.members) ? t.members : [];
+  if (!arr.length) return '';
+  const leader = arr[0] || '';
+  const rest = arr.slice(1).filter(Boolean);
+  const restStr = rest.length ? (', ' + rest.map(x => esc(x)).join(', ')) : '';
+  // 3rd row: leader in bold, then all other members
+  return `<div class="small membersLine"><b>${esc(leader)}</b>${restStr}</div>`;
+}
+
+
+function renderLobby(teams) {
+  $("joinedCount").textContent = String(teams.length);
+  $("lobbyTeams").innerHTML = teams.map(t => `
+    <div class="lobbyTeam">
+      <div class="avatar">${t.avatarUrl ? `<img src="${esc(t.avatarUrl)}"/>` : "👤"}</div>
+      <div class="nameLine">${esc(t.name)}</div>
+      ${membersHtml(t)}
+    </div>
+  `).join("");
+}
+
+function renderChoices(state) {
+      const q = state.question;
+      const el = $("choices");
+      el.innerHTML = "";
+      if (!q) return;
+
+      for (let i = 0; i < 4; i++) {
+        const div = document.createElement("div");
+        div.className = "choiceCard";
+        if (state.phase === "revealed") {
+          if (i === q.correctIndex) div.classList.add("correct");
+          else div.classList.add("wrong");
+        }
+        div.innerHTML = `<b>${letter(i)}.</b> ${esc(q.choices[i] || "")}`;
+        el.appendChild(div);
+      }
+    }
+
+    
+function renderBoard(teams, containerId) {
+  const sorted = [...teams].sort((a,b) => (b.score||0) - (a.score||0));
+  $(containerId).innerHTML = sorted.map(t => `
+    <div class="teamItem">
+      <div class="teamLeft">
+        <div class="avatar">${t.avatarUrl ? `<img src="${esc(t.avatarUrl)}"/>` : "👤"}</div>
+        <div style="min-width:0;">
+          <div class="nameLine">${esc(t.name)}</div>
+          ${membersHtml(t)}
+        </div>
+      </div>
+      <div class="score">${t.score || 0}</div>
+    </div>
+  `).join("");
+}
+
+socket.on("state, (s) => {
+      $("pTitle").textContent = s.title || "—";
+      $("pPhase").textContent = s.phase + (s.paused ? " (paused)" : "");
+      $("pTimer").textContent = s.timer == null ? "--" : String(s.timer);
+
+      if (s.phase === "lobby") {
+        show("lobby");
+        renderLobby(s.teams || []);
+        return;
+      }
+
+      if (s.phase === "finished") {
+        show("finished");
+        renderBoard(s.teams || [], "finalBoard");
+        return;
+      }
+
+      show("question");
+      $("bigTimer").textContent = s.timer == null ? "--" : String(s.timer);
+
+      const q = s.question;
+      $("qText").textContent = q ? q.text : "—";
+      renderMedia(q);
+      renderChoices(s);
+      renderBoard(s.teams || [], "board");
+    });
+  </script>
+</body>
+</html>
