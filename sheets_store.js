@@ -111,7 +111,7 @@ async function loadQuestionsFromSheet() {
   const sheets = await getSheetsClient();
   const spreadsheetId = mustEnv("SHEET_ID");
   const sheetName = process.env.QUESTIONS_SHEET_NAME || "Questions";
-  const range = `${sheetName}!A1:K`;
+  const range = `${sheetName}!A1:Z`;   // ✅ was A1:K
 
   const res = await sheets.spreadsheets.values.get({ spreadsheetId, range });
   const rows = res.data.values || [];
@@ -131,6 +131,7 @@ async function loadQuestionsFromSheet() {
   const iCorrect = idx("correct");
   const iTimeSec = idx("timesec");
   const iEnabled = idx("enabled");
+  const iMediaHeight = idx("mediaheight"); // ✅ add
 
   if (iQuestion === -1 || iA === -1 || iB === -1 || iC === -1 || iD === -1 || iCorrect === -1) {
     throw new Error(
@@ -151,6 +152,10 @@ async function loadQuestionsFromSheet() {
     const D = String(row[iD] || "").trim();
     const correctLetter = normalizeCorrectLetter(row[iCorrect]);
     const timeSec = iTimeSec !== -1 ? toInt(row[iTimeSec], 20) : 20;
+
+    // ✅ per-question media height
+    const mediaHeight = iMediaHeight !== -1 ? toInt(row[iMediaHeight], 600) : 600;
+    const safeMediaHeight = [300, 400, 500, 600, 700, 800].includes(mediaHeight) ? mediaHeight : 600;
 
     if (!question) continue;
     if (![A, B, C, D].every(x => x.length > 0)) continue;
@@ -175,6 +180,7 @@ async function loadQuestionsFromSheet() {
     if (mediaType && mediaUrl) {
       qObj.mediaType = mediaType;
       qObj.mediaUrl = mediaUrl;
+      qObj.mediaHeight = safeMediaHeight; // ✅ add
     }
 
     questions.push(qObj);
