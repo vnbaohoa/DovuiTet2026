@@ -141,7 +141,7 @@ function renderBoard(teams, containerId) {
   `).join("");
 }
 
-socket.on("state, (s) => {
+socket.on("state", (s) => {
       $("pTitle").textContent = s.title || "—";
       $("pPhase").textContent = s.phase + (s.paused ? " (paused)" : "");
       $("pTimer").textContent = s.timer == null ? "--" : String(s.timer);
