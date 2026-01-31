@@ -87,7 +87,18 @@
       teamsBox.innerHTML = (hs.teams || []).map(t => `
         <div class="teamItem">
           <div class="teamLeft">
-            <div class="avatar">${t.avatarUrl ? `<img src="${esc(t.avatarUrl)}" />` : "👤"}</div>
+            <div class="avatar">${
+  t.avatarUrl
+    ? (() => {
+        const raw = String(t.avatarUrl);
+        const src =
+          raw.startsWith("/") ? raw
+          : raw.startsWith("teams/") ? `/${raw}`
+          : `/teams/${raw}`;
+        return `<img src="${esc(src)}" />`;
+      })()
+    : "👤"
+}</div>
             <div style="min-width:0;">
               <div class="nameLine">${esc(t.name)} <span class="small">(${esc(t.pin)})</span></div>
               <div class="small">
