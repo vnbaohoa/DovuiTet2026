@@ -53,6 +53,31 @@
   <script src="/client.js"></script>
   <script>
     socket.emit("registerProjector");
+    // ===== COUNTDOWN TIMER =====
+let countdownInterval = null;
+
+function startCountdown(endAtMs) {
+  if (countdownInterval) clearInterval(countdownInterval);
+
+  function tick() {
+    const remainingMs = Math.max(0, endAtMs - Date.now());
+    const seconds = Math.ceil(remainingMs / 1000);
+
+    const timerEl =
+      document.getElementById("bigTimer") ||
+      document.getElementById("pTimer");
+
+    if (timerEl) timerEl.textContent = seconds;
+
+    if (remainingMs <= 0) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+    }
+  }
+
+  tick(); // update immediately
+  countdownInterval = setInterval(tick, 250);
+}
 
     function show(viewId) {
       $("lobbyView").style.display = (viewId === "lobby") ? "" : "none";
@@ -99,7 +124,18 @@ function renderLobby(teams) {
   $("joinedCount").textContent = String(teams.length);
   $("lobbyTeams").innerHTML = teams.map(t => `
     <div class="lobbyTeam">
-      <div class="avatar">${t.avatarUrl ? `<img src="${esc(t.avatarUrl)}"/>` : "👤"}</div>
+      <div class="avatar">${
+  t.avatarUrl
+    ? (() => {
+        const raw = String(t.avatarUrl);
+        const src =
+          raw.startsWith("/") ? raw
+          : raw.startsWith("teams/") ? `/${raw}`
+          : `/teams/${raw}`;
+        return `<img src="${esc(src)}" />`;
+      })()
+    : "👤"
+}</div>
       <div class="nameLine">${esc(t.name)}</div>
       ${membersHtml(t)}
     </div>
@@ -130,7 +166,18 @@ function renderBoard(teams, containerId) {
   $(containerId).innerHTML = sorted.map(t => `
     <div class="teamItem">
       <div class="teamLeft">
-        <div class="avatar">${t.avatarUrl ? `<img src="${esc(t.avatarUrl)}"/>` : "👤"}</div>
+        <div class="avatar">${
+  t.avatarUrl
+    ? (() => {
+        const raw = String(t.avatarUrl);
+        const src =
+          raw.startsWith("/") ? raw
+          : raw.startsWith("teams/") ? `/${raw}`
+          : `/teams/${raw}`;
+        return `<img src="${esc(src)}" />`;
+      })()
+    : "👤"
+}</div>
         <div style="min-width:0;">
           <div class="nameLine">${esc(t.name)}</div>
           ${membersHtml(t)}
@@ -166,6 +213,22 @@ socket.on("state", (s) => {
       renderMedia(q);
       renderChoices(s);
       renderBoard(s.teams || [], "board");
+
+  // ----- TIMER CONTROL -----
+if (s.phase === "question" && !s.paused && s.timer != null) {
+  // compute end time ONCE
+  if (!window.__endAt) {
+    window.__endAt = Date.now() + s.timer * 1000;
+    startCountdown(window.__endAt);
+  }
+} else {
+  // pause / reveal / lobby
+  window.__endAt = null;
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
+}
     });
   </script>
 </body>
