@@ -104,7 +104,7 @@ function resetState() {
     title: GAME_TITLE,
     gameId: makeGameId(),
 
-    phase: "lobby",         // lobby | question | revealed | scoreboard | finished
+    phase: "lobby",         // lobby | question | revealed | leaderboard | finished
     qIndex: -1,
     paused: true,
     manualScoring: false,
@@ -398,6 +398,12 @@ function revealAnswer() {
 
   syncTotalsToTeamsSheet().finally(() => {});
   logAnswersNow().finally(() => {});
+}
+
+function showLeaderboard() {
+  if (state.phase !== "revealed") return;
+  state.phase = "leaderboard";
+  state.paused = true;
 }
 
 function nextQuestion() {
@@ -697,16 +703,15 @@ io.on("connection", (socket) => {
   socket.on("hostNext", () => {
   if (!isHost(socket)) return;
 
-  // Step 1: after reveal -> show scoreboard
+  // revealed -> leaderboard
   if (state.phase === "revealed") {
-    state.phase = "scoreboard";
-    state.paused = true;
+    showLeaderboard();
     broadcast();
     return;
   }
 
-  // Step 2: after scoreboard -> go to next question
-  if (state.phase === "scoreboard") {
+  // leaderboard -> next question
+  if (state.phase === "leaderboard") {
     nextQuestion();
     broadcast();
     return;
