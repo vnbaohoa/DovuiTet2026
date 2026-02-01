@@ -58,6 +58,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/client.js"></script>
   <script>
+    // Register host
     socket.emit("registerHost");
 
     const titleEl = $("title");
@@ -72,11 +73,18 @@
       phaseEl.textContent = state.phase + (state.paused ? " (paused)" : "");
       timerEl.textContent = state.timer == null ? "--" : String(state.timer);
 
+      // Buttons: Start only in lobby
       $("start").disabled = !(state.phase === "lobby");
+
+      // Pause/Resume enabled only during question
       $("pause").disabled = !(state.phase === "question");
       $("pause").textContent = state.paused ? "Resume" : "Pause";
+
+      // Reveal enabled only during question
       $("reveal").disabled = !(state.phase === "question");
-      $("next").disabled = !(state.phase === "revealed");
+
+      // Next enabled when revealed OR leaderboard (we show leaderboard first, then next question)
+      $("next").disabled = !((state.phase === "revealed") || (state.phase === "leaderboard"));
 
       $("manual").checked = !!state.manualScoring;
       $("shuffleQs").checked = !!state.shuffleQuestions;
@@ -85,6 +93,7 @@
 
     function renderHostState(hs) {
       teamsBox.innerHTML = (hs.teams || []).map(t => `
+
         <div class="teamItem">
           <div class="teamLeft">
             <div class="avatar">${
@@ -95,7 +104,7 @@
           raw.startsWith("/") ? raw
           : raw.startsWith("teams/") ? `/${raw}`
           : `/teams/${raw}`;
-        return `<img src="${esc(src)}" />`;
+        return `<img src="${esc(src)}" style="max-width:56px;max-height:56px;object-fit:cover;border-radius:8px;" />`;
       })()
     : "👤"
 }</div>
@@ -150,6 +159,7 @@
       setTimeout(()=>hostErr.textContent="", 6000);
     });
 
+    // Button handlers
     $("start").onclick = () => socket.emit("hostStart");
     $("pause").onclick = () => socket.emit("hostPauseToggle");
     $("reveal").onclick = () => socket.emit("hostReveal");
@@ -159,6 +169,25 @@
     $("manual").onchange = (e) => socket.emit("hostSetManualScoring", e.target.checked);
     $("shuffleQs").onchange = () => socket.emit("hostSetShuffle", { shuffleQuestions: $("shuffleQs").checked });
     $("shuffleChoices").onchange = () => socket.emit("hostSetShuffle", { shuffleChoices: $("shuffleChoices").checked });
+
+    // Keyboard shortcuts:
+    // Space => pause/resume (hostPauseToggle)
+    // Enter => hostNext (revealed -> leaderboard -> next)
+    document.addEventListener("keydown", (e) => {
+      // ignore when typing in inputs/textareas
+      const active = document.activeElement;
+      const tag = active && active.tagName ? active.tagName.toLowerCase() : "";
+      if (tag === "input" || tag === "textarea") return;
+
+      if (e.code === "Space") {
+        // Only toggle when current phase is 'question' (server will ignore if not valid)
+        e.preventDefault();
+        socket.emit("hostPauseToggle");
+      } else if (e.code === "Enter") {
+        e.preventDefault();
+        socket.emit("hostNext");
+      }
+    });
   </script>
 </body>
 </html>
