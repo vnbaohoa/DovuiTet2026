@@ -72,6 +72,23 @@ function getClientIp(socket) {
 function getUserAgent(socket) {
   return socket.handshake.headers["user-agent"] || "";
 }
+// 0 if wrong. If correct: 20 points if answered within first 4 seconds,
+// then -1 point for each second later (based on whole seconds late).
+function computeQuestionScore(isCorrect, lockedAtRunMs, timeSec) {
+  if (!isCorrect) return 0;
+
+  timeSec = Number.isFinite(timeSec) ? Math.max(1, Math.round(timeSec)) : 20;
+  const elapsedSec = Number.isFinite(lockedAtRunMs) ? (lockedAtRunMs / 1000) : timeSec;
+
+  const maxPoints = 20;
+
+  // first 4 seconds => full points
+  if (elapsedSec <= 4) return maxPoints;
+
+  // late seconds beyond the first 4 seconds
+  const secondsLate = Math.max(0, Math.ceil(elapsedSec - 4));
+  return Math.max(0, maxPoints - secondsLate);
+}
 
 // ------------------- STATE -------------------
 let state = resetState();
@@ -357,34 +374,27 @@ function revealAnswer() {
     return;
   }
 
-  const correct = q.correctIndex;
-
-  const correctTeams = [...state.teams.values()]
-    .filter(t => t.lockedChoice === correct && t.lockedAtRunMs != null)
-    .sort((a, b) => a.lockedAtRunMs - b.lockedAtRunMs);
-
-  const fastest = correctTeams.length ? correctTeams[0].lockedAtRunMs : null;
-
-  const BASE = 1000;
-  const SPEED_MAX = 500;
-  const FASTEST_BONUS = 150;
+    const correct = q.correctIndex;
 
   for (const t of state.teams.values()) {
     t.lastPointsAwarded = 0;
 
-    if (t.lockedChoice == null) { t.lastResult = "wrong"; continue; }
-    if (t.lockedChoice !== correct) { t.lastResult = "wrong"; continue; }
+    // no answer => wrong => 0
+    if (t.lockedChoice == null || t.lockedAtRunMs == null) {
+      t.lastResult = "wrong";
+      continue;
+    }
 
-    t.lastResult = "correct";
-    const elapsedSec = t.lockedAtRunMs / 1000;
-    const speedFactor = Math.max(0, 1 - (elapsedSec / state.timeSec));
-    const speedPts = Math.round(SPEED_MAX * speedFactor);
-    const fastestBonus = (fastest != null && t.lockedAtRunMs === fastest) ? FASTEST_BONUS : 0;
+    const isCorrect = (t.lockedChoice === correct);
+    t.lastResult = isCorrect ? "correct" : "wrong";
 
-    const gained = BASE + speedPts + fastestBonus;
+    const gained = computeQuestionScore(isCorrect, t.lockedAtRunMs, state.timeSec);
     t.lastPointsAwarded = gained;
     t.score += gained;
   }
+
+  syncTotalsToTeamsSheet().finally(() => {});
+  logAnswersNow().finally(() => {});
 
   syncTotalsToTeamsSheet().finally(() => {});
   logAnswersNow().finally(() => {});
