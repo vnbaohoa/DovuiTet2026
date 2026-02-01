@@ -200,3 +200,8 @@ button.danger{ background: rgba(255, 70, 70, 0.20); border-color: rgba(255, 70, 
   object-fit: contain;    /* no cropping */
 }
 
+.projectorWrap .questionText {
+  font-size: 44px;   /* 👈 change this value */
+  line-height: 1.25;
+}
+
