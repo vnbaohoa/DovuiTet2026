@@ -37,10 +37,15 @@
       <div class="choiceGrid" id="choices"></div>
 
       <div class="hr"></div>
-      <div class="row">
-        <div style="font-weight:900;">Leaderboard</div>
+
+      <!-- Leaderboard is hidden during the 'question' phase.
+           It will be shown when phase is 'revealed', 'leaderboard' or 'finished'. -->
+      <div id="leaderboardWrap" style="display:none;">
+        <div class="row">
+          <div style="font-weight:900;">Leaderboard</div>
+        </div>
+        <div id="board" class="teamList" style="margin-top:10px;"></div>
       </div>
-      <div id="board" class="teamList" style="margin-top:10px;"></div>
     </div>
 
     <div id="finishedView" class="card" style="display:none;">
@@ -53,31 +58,45 @@
   <script src="/client.js"></script>
   <script>
     socket.emit("registerProjector");
+
     // ===== COUNTDOWN TIMER =====
-let countdownInterval = null;
+    let countdownInterval = null;
+    let __endAt = null;
 
-function startCountdown(endAtMs) {
-  if (countdownInterval) clearInterval(countdownInterval);
+    function startCountdown(endAtMs) {
+      if (countdownInterval) clearInterval(countdownInterval);
 
-  function tick() {
-    const remainingMs = Math.max(0, endAtMs - Date.now());
-    const seconds = Math.ceil(remainingMs / 1000);
+      function tick() {
+        const remainingMs = Math.max(0, endAtMs - Date.now());
+        const seconds = Math.ceil(remainingMs / 1000);
 
-    const timerEl =
-      document.getElementById("bigTimer") ||
-      document.getElementById("pTimer");
+        const timerEl =
+          document.getElementById("bigTimer") ||
+          document.getElementById("pTimer");
 
-    if (timerEl) timerEl.textContent = seconds;
+        if (timerEl) timerEl.textContent = seconds;
 
-    if (remainingMs <= 0) {
-      clearInterval(countdownInterval);
-      countdownInterval = null;
+        if (remainingMs <= 0) {
+          clearInterval(countdownInterval);
+          countdownInterval = null;
+        }
+      }
+
+      tick(); // update immediately
+      countdownInterval = setInterval(tick, 250);
     }
-  }
 
-  tick(); // update immediately
-  countdownInterval = setInterval(tick, 250);
-}
+    function stopCountdown() {
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+      }
+      __endAt = null;
+      const timerEl =
+        document.getElementById("bigTimer") ||
+        document.getElementById("pTimer");
+      if (timerEl) timerEl.textContent = "--";
+    }
 
     function show(viewId) {
       $("lobbyView").style.display = (viewId === "lobby") ? "" : "none";
@@ -86,56 +105,53 @@ function startCountdown(endAtMs) {
     }
 
     function renderMedia(q) {
-  const box = $("qMedia");
-  box.innerHTML = "";
+      const box = $("qMedia");
+      box.innerHTML = "";
 
-  // No media → hide
-  if (!q || !q.mediaType || !q.mediaUrl) {
-    box.style.display = "none";
-    box.style.height = "";
-    box.style.maxHeight = "";
-    return;
-  }
+      // No media → hide
+      if (!q || !q.mediaType || !q.mediaUrl) {
+        box.style.display = "none";
+        box.style.height = "";
+        box.style.maxHeight = "";
+        return;
+      }
 
-  // ✅ APPLY PER-QUESTION HEIGHT (default 600)
-  const h = q.mediaHeight || 600;
-  box.style.display = "";
-  box.style.height = h + "px";
-  box.style.maxHeight = h + "px";
+      // ✅ APPLY PER-QUESTION HEIGHT (default 600)
+      const h = q.mediaHeight || 600;
+      box.style.display = "";
+      box.style.height = h + "px";
+      box.style.maxHeight = h + "px";
 
-  if (q.mediaType === "image") {
-    const img = document.createElement("img");
-    img.src = q.mediaUrl;
-    box.appendChild(img);
-  } 
-  else if (q.mediaType === "video") {
-    const vid = document.createElement("video");
-    vid.src = q.mediaUrl;
-    vid.autoplay = true;
-    vid.muted = true;
-    vid.loop = true;
-    vid.playsInline = true;
-    box.appendChild(vid);
-  }
-}
+      if (q.mediaType === "image") {
+        const img = document.createElement("img");
+        img.src = q.mediaUrl;
+        box.appendChild(img);
+      } 
+      else if (q.mediaType === "video") {
+        const vid = document.createElement("video");
+        vid.src = q.mediaUrl;
+        vid.autoplay = true;
+        vid.muted = true;
+        vid.loop = true;
+        vid.playsInline = true;
+        box.appendChild(vid);
+      }
+    }
 
-    
-function membersHtml(t) {
-  const arr = Array.isArray(t.members) ? t.members : [];
-  if (!arr.length) return '';
-  const leader = arr[0] || '';
-  const rest = arr.slice(1).filter(Boolean);
-  const restStr = rest.length ? (', ' + rest.map(x => esc(x)).join(', ')) : '';
-  // 3rd row: leader in bold, then all other members
-  return `<div class="small membersLine"><b>${esc(leader)}</b>${restStr}</div>`;
-}
+    function membersHtml(t) {
+      const arr = Array.isArray(t.members) ? t.members : [];
+      if (!arr.length) return '';
+      const leader = arr[0] || '';
+      const rest = arr.slice(1).filter(Boolean);
+      const restStr = rest.length ? (', ' + rest.map(x => esc(x)).join(', ')) : '';
+      return `<div class="small membersLine"><b>${esc(leader)}</b>${restStr}</div>`;
+    }
 
-
-function renderLobby(teams) {
-  $("joinedCount").textContent = String(teams.length);
-  $("lobbyTeams").innerHTML = teams.map(t => `
-    <div class="lobbyTeam">
-      <div class="avatar">${
+    function renderLobby(teams) {
+      $("joinedCount").textContent = String(teams.length);
+      $("lobbyTeams").innerHTML = teams.map(t => `
+        <div class="lobbyTeam">
+          <div class="avatar">${
   t.avatarUrl
     ? (() => {
         const raw = String(t.avatarUrl);
@@ -147,13 +163,13 @@ function renderLobby(teams) {
       })()
     : "👤"
 }</div>
-      <div class="nameLine">${esc(t.name)}</div>
-      ${membersHtml(t)}
-    </div>
-  `).join("");
-}
+          <div class="nameLine">${esc(t.name)}</div>
+          ${membersHtml(t)}
+        </div>
+      `).join("");
+    }
 
-function renderChoices(state) {
+    function renderChoices(state) {
       const q = state.question;
       const el = $("choices");
       el.innerHTML = "";
@@ -171,13 +187,18 @@ function renderChoices(state) {
       }
     }
 
-    
-function renderBoard(teams, containerId) {
-  const sorted = [...teams].sort((a,b) => (b.score||0) - (a.score||0));
-  $(containerId).innerHTML = sorted.map(t => `
-    <div class="teamItem">
-      <div class="teamLeft">
-        <div class="avatar">${
+    // Show only when revealed/leaderboard/finished
+    function shouldShowLeaderboard(phase) {
+      return phase === "revealed" || phase === "leaderboard" || phase === "finished";
+    }
+
+    function renderBoard(teams, containerId) {
+      // sort highest to lowest
+      const sorted = [...teams].sort((a,b) => (b.score||0) - (a.score||0));
+      $(containerId).innerHTML = sorted.map(t => `
+        <div class="teamItem">
+          <div class="teamLeft">
+            <div class="avatar">${
   t.avatarUrl
     ? (() => {
         const raw = String(t.avatarUrl);
@@ -189,20 +210,27 @@ function renderBoard(teams, containerId) {
       })()
     : "👤"
 }</div>
-        <div style="min-width:0;">
-          <div class="nameLine">${esc(t.name)}</div>
-          ${membersHtml(t)}
+            <div style="min-width:0;">
+              <div class="nameLine">${esc(t.name)}</div>
+              ${membersHtml(t)}
+            </div>
+          </div>
+          <div class="score">${t.score || 0}</div>
         </div>
-      </div>
-      <div class="score">${t.score || 0}</div>
-    </div>
-  `).join("");
-}
+      `).join("");
+    }
 
-socket.on("state", (s) => {
+    socket.on("state", (s) => {
       $("pTitle").textContent = s.title || "—";
       $("pPhase").textContent = s.phase + (s.paused ? " (paused)" : "");
       $("pTimer").textContent = s.timer == null ? "--" : String(s.timer);
+
+      // Reset per-phase countdown state when phase changes
+      // (if new question begins we'll create a fresh endAt)
+      if (!window.__lastPhase || window.__lastPhase !== s.phase) {
+        stopCountdown();
+      }
+      window.__lastPhase = s.phase;
 
       if (s.phase === "lobby") {
         show("lobby");
@@ -212,34 +240,44 @@ socket.on("state", (s) => {
 
       if (s.phase === "finished") {
         show("finished");
+        // show final board
         renderBoard(s.teams || [], "finalBoard");
+        // ensure leaderboard area visible in finished view
+        $("leaderboardWrap").style.display = "none";
         return;
       }
 
+      // question/revealed/leaderboard
       show("question");
+
+      // timer text
       $("bigTimer").textContent = s.timer == null ? "--" : String(s.timer);
 
       const q = s.question;
       $("qText").textContent = q ? q.text : "—";
       renderMedia(q);
       renderChoices(s);
-      renderBoard(s.teams || [], "board");
 
-  // ----- TIMER CONTROL -----
-if (s.phase === "question" && !s.paused && s.timer != null) {
-  // compute end time ONCE
-  if (!window.__endAt) {
-    window.__endAt = Date.now() + s.timer * 1000;
-    startCountdown(window.__endAt);
-  }
-} else {
-  // pause / reveal / lobby
-  window.__endAt = null;
-  if (countdownInterval) {
-    clearInterval(countdownInterval);
-    countdownInterval = null;
-  }
-}
+      // Leaderboard visibility:
+      if (shouldShowLeaderboard(s.phase)) {
+        $("leaderboardWrap").style.display = "";
+        renderBoard(s.teams || [], "board");
+      } else {
+        // hide leaderboard during live question
+        $("leaderboardWrap").style.display = "none";
+      }
+
+      // ----- TIMER CONTROL -----
+      if (s.phase === "question" && !s.paused && s.timer != null) {
+        // compute end time ONCE for this question run
+        if (!__endAt) {
+          __endAt = Date.now() + s.timer * 1000;
+          startCountdown(__endAt);
+        }
+      } else {
+        // pause / reveal / lobby / finished -> stop live countdown
+        stopCountdown();
+      }
     });
   </script>
 </body>
