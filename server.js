@@ -104,7 +104,7 @@ function resetState() {
     title: GAME_TITLE,
     gameId: makeGameId(),
 
-    phase: "lobby",         // lobby | question | revealed | finished
+    phase: "lobby",         // lobby | question | revealed | scoreboard | finished
     qIndex: -1,
     paused: true,
     manualScoring: false,
@@ -695,11 +695,23 @@ io.on("connection", (socket) => {
   });
 
   socket.on("hostNext", () => {
-    if (!isHost(socket)) return;
-    if (state.phase !== "revealed") return;
+  if (!isHost(socket)) return;
+
+  // Step 1: after reveal -> show scoreboard
+  if (state.phase === "revealed") {
+    state.phase = "scoreboard";
+    state.paused = true;
+    broadcast();
+    return;
+  }
+
+  // Step 2: after scoreboard -> go to next question
+  if (state.phase === "scoreboard") {
     nextQuestion();
     broadcast();
-  });
+    return;
+  }
+});
 
   socket.on("disconnect", () => {
     if (socket.id === state.hostId) state.hostId = null;
