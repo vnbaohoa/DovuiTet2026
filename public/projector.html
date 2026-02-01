@@ -26,6 +26,7 @@
       <div id="lobbyTeams" class="lobbyGrid"></div>
     </div>
 
+    <!-- QUESTION SCREEN -->
     <div id="questionView" class="card" style="display:none;">
       <div class="row" style="align-items:flex-end;">
         <div class="questionText" id="qText">—</div>
@@ -35,17 +36,15 @@
 
       <div id="qMedia" class="media" style="display:none;"></div>
       <div class="choiceGrid" id="choices"></div>
+    </div>
 
-      <div class="hr"></div>
-
-      <!-- Leaderboard is hidden during the 'question' phase.
-           It will be shown when phase is 'revealed', 'leaderboard' or 'finished'. -->
-      <div id="leaderboardWrap" style="display:none;">
-        <div class="row">
-          <div style="font-weight:900;">Leaderboard</div>
-        </div>
-        <div id="board" class="teamList" style="margin-top:10px;"></div>
+    <!-- LEADERBOARD SCREEN (shown after revealed, when server phase === "leaderboard") -->
+    <div id="leaderboardView" class="card" style="display:none;">
+      <div class="row">
+        <div style="font-weight:900;font-size:22px;">Leaderboard</div>
       </div>
+      <div class="hr"></div>
+      <div id="board" class="teamList" style="margin-top:10px;"></div>
     </div>
 
     <div id="finishedView" class="card" style="display:none;">
@@ -62,6 +61,8 @@
     // ===== COUNTDOWN TIMER =====
     let countdownInterval = null;
     let __endAt = null;
+    let __lastPhase = null;
+    let __lastQid = null;
 
     function startCountdown(endAtMs) {
       if (countdownInterval) clearInterval(countdownInterval);
@@ -82,7 +83,7 @@
         }
       }
 
-      tick(); // update immediately
+      tick();
       countdownInterval = setInterval(tick, 250);
     }
 
@@ -101,6 +102,7 @@
     function show(viewId) {
       $("lobbyView").style.display = (viewId === "lobby") ? "" : "none";
       $("questionView").style.display = (viewId === "question") ? "" : "none";
+      $("leaderboardView").style.display = (viewId === "leaderboard") ? "" : "none";
       $("finishedView").style.display = (viewId === "finished") ? "" : "none";
     }
 
@@ -108,7 +110,6 @@
       const box = $("qMedia");
       box.innerHTML = "";
 
-      // No media → hide
       if (!q || !q.mediaType || !q.mediaUrl) {
         box.style.display = "none";
         box.style.height = "";
@@ -116,7 +117,6 @@
         return;
       }
 
-      // ✅ APPLY PER-QUESTION HEIGHT (default 600)
       const h = q.mediaHeight || 600;
       box.style.display = "";
       box.style.height = h + "px";
@@ -126,8 +126,7 @@
         const img = document.createElement("img");
         img.src = q.mediaUrl;
         box.appendChild(img);
-      } 
-      else if (q.mediaType === "video") {
+      } else if (q.mediaType === "video") {
         const vid = document.createElement("video");
         vid.src = q.mediaUrl;
         vid.autoplay = true;
@@ -152,17 +151,17 @@
       $("lobbyTeams").innerHTML = teams.map(t => `
         <div class="lobbyTeam">
           <div class="avatar">${
-  t.avatarUrl
-    ? (() => {
-        const raw = String(t.avatarUrl);
-        const src =
-          raw.startsWith("/") ? raw
-          : raw.startsWith("teams/") ? `/${raw}`
-          : `/teams/${raw}`;
-        return `<img src="${esc(src)}" />`;
-      })()
-    : "👤"
-}</div>
+            t.avatarUrl
+              ? (() => {
+                  const raw = String(t.avatarUrl);
+                  const src =
+                    raw.startsWith("/") ? raw
+                    : raw.startsWith("teams/") ? `/${raw}`
+                    : `/teams/${raw}`;
+                  return `<img src="${esc(src)}" />`;
+                })()
+              : "👤"
+          }</div>
           <div class="nameLine">${esc(t.name)}</div>
           ${membersHtml(t)}
         </div>
@@ -178,41 +177,37 @@
       for (let i = 0; i < 4; i++) {
         const div = document.createElement("div");
         div.className = "choiceCard";
+
+        // highlight correct only when revealed
         if (state.phase === "revealed") {
           if (i === q.correctIndex) div.classList.add("correct");
           else div.classList.add("wrong");
         }
+
         div.innerHTML = `<b>${letter(i)}.</b> ${esc(q.choices[i] || "")}`;
         el.appendChild(div);
       }
     }
 
-    // Show only when revealed/leaderboard/finished
-    function shouldShowLeaderboard(phase) {
-      return phase === "revealed" || phase === "leaderboard" || phase === "finished";
-    }
-
     function renderBoard(teams, containerId) {
-      // sort highest to lowest
       const sorted = [...teams].sort((a,b) => (b.score||0) - (a.score||0));
       $(containerId).innerHTML = sorted.map(t => `
         <div class="teamItem">
           <div class="teamLeft">
             <div class="avatar">${
-  t.avatarUrl
-    ? (() => {
-        const raw = String(t.avatarUrl);
-        const src =
-          raw.startsWith("/") ? raw
-          : raw.startsWith("teams/") ? `/${raw}`
-          : `/teams/${raw}`;
-        return `<img src="${esc(src)}" />`;
-      })()
-    : "👤"
-}</div>
+              t.avatarUrl
+                ? (() => {
+                    const raw = String(t.avatarUrl);
+                    const src =
+                      raw.startsWith("/") ? raw
+                      : raw.startsWith("teams/") ? `/${raw}`
+                      : `/teams/${raw}`;
+                    return `<img src="${esc(src)}" />`;
+                  })()
+                : "👤"
+            }</div>
             <div style="min-width:0;">
               <div class="nameLine">${esc(t.name)}</div>
-              ${membersHtml(t)}
             </div>
           </div>
           <div class="score">${t.score || 0}</div>
@@ -225,12 +220,11 @@
       $("pPhase").textContent = s.phase + (s.paused ? " (paused)" : "");
       $("pTimer").textContent = s.timer == null ? "--" : String(s.timer);
 
-      // Reset per-phase countdown state when phase changes
-      // (if new question begins we'll create a fresh endAt)
-      if (!window.__lastPhase || window.__lastPhase !== s.phase) {
-        stopCountdown();
-      }
-      window.__lastPhase = s.phase;
+      // If phase changed OR question changed, stop countdown so it doesn't "stick"
+      const qid = s.question && s.question.qId ? String(s.question.qId) : null;
+      if (__lastPhase !== s.phase || __lastQid !== qid) stopCountdown();
+      __lastPhase = s.phase;
+      __lastQid = qid;
 
       if (s.phase === "lobby") {
         show("lobby");
@@ -240,17 +234,19 @@
 
       if (s.phase === "finished") {
         show("finished");
-        // show final board
         renderBoard(s.teams || [], "finalBoard");
-        // ensure leaderboard area visible in finished view
-        $("leaderboardWrap").style.display = "none";
         return;
       }
 
-      // question/revealed/leaderboard
+      if (s.phase === "leaderboard") {
+        show("leaderboard");
+        renderBoard(s.teams || [], "board");
+        return;
+      }
+
+      // question or revealed => show question screen
       show("question");
 
-      // timer text
       $("bigTimer").textContent = s.timer == null ? "--" : String(s.timer);
 
       const q = s.question;
@@ -258,24 +254,13 @@
       renderMedia(q);
       renderChoices(s);
 
-      // Leaderboard visibility:
-      if (shouldShowLeaderboard(s.phase)) {
-        $("leaderboardWrap").style.display = "";
-        renderBoard(s.teams || [], "board");
-      } else {
-        // hide leaderboard during live question
-        $("leaderboardWrap").style.display = "none";
-      }
-
-      // ----- TIMER CONTROL -----
+      // countdown only during LIVE question (not paused, not revealed)
       if (s.phase === "question" && !s.paused && s.timer != null) {
-        // compute end time ONCE for this question run
         if (!__endAt) {
           __endAt = Date.now() + s.timer * 1000;
           startCountdown(__endAt);
         }
       } else {
-        // pause / reveal / lobby / finished -> stop live countdown
         stopCountdown();
       }
     });
